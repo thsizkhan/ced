@@ -56,13 +56,17 @@ fbq('init','1704418213974680');
 fbq('track','PageView');
 
 const BEACON_TRACKING_BASE = 'https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz';
+const OFFER_CLICK_DELAY_MS = 150;
 const FORWARDED_PAGE_PARAMS = [
-  'fbclid',
+  'sub3',
+  'sub4',
+  'sub5',
   'utm_source',
   'utm_medium',
   'utm_campaign',
   'utm_content',
-  'utm_term'
+  'utm_term',
+  'fbclid'
 ];
 
 function tqCookie(name) {
@@ -95,17 +99,35 @@ function tqBeaconUrl(service) {
     if (value) beaconUrl.searchParams.set(param, value);
   });
 
-  const fbp = tqCookie('_fbp');
-  const fbc = tqCookie('_fbc');
+  const fbclid = pageParams.get('fbclid');
+  const fbp = tqCookie('_fbp') || pageParams.get('fbp');
+  let fbc = tqCookie('_fbc') || pageParams.get('fbc');
+
+  if (!fbc && fbclid) {
+    fbc = 'fb.1.' + Date.now() + '.' + fbclid;
+  }
+
   if (fbp) beaconUrl.searchParams.set('fbp', fbp);
   if (fbc) beaconUrl.searchParams.set('fbc', fbc);
 
   return beaconUrl.toString();
 }
 
-function tqGo(link, service) {
-  try{fbq('trackCustom','ClickToOffer',{service:service});}catch(e){}
-  link.href = tqBeaconUrl(service);
+function tqGo(event, link, service) {
+  const destination = tqBeaconUrl(service);
+  link.href = destination;
+  try{fbq('trackCustom','OfferClick',{content_name:service});}catch(e){}
+
+  if (!event || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return true;
+  }
+
+  event.preventDefault();
+  window.setTimeout(function() {
+    window.location.assign(destination);
+  }, OFFER_CLICK_DELAY_MS);
+
+  return false;
 }
 
 function tqPrepareLinks() {
@@ -131,21 +153,21 @@ if (document.readyState === 'loading') {
 <section class="hero">
   <span class="kicker">Free · No obligation · Homeowners only</span>
   <h1>Never accept the first quote. <span class="hl">Compare three.</span></h1>
-  <p class="sub">Contractors quote higher when they think you're not comparing. Tell us what your home needs and get up to 3 competing quotes from local, licensed pros.</p>
+  <p class="sub">Quotes for the same job can vary widely. Tell us what your home needs and get up to 3 competing quotes from local pros.</p>
   <div class="q">What does your home need?</div>
 </section>
 
 <div class="tiles">
-  <a class="tile" data-service="roofing" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=roofing" onclick="tqGo(this,'roofing')">
+  <a class="tile" data-service="roofing" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=roofing" onclick="return tqGo(event,this,'roofing')">
     <svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></svg>
     Roofing<span class="go">Get quotes →</span></a>
-  <a class="tile" data-service="windows" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=windows" onclick="tqGo(this,'windows')">
+  <a class="tile" data-service="windows" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=windows" onclick="return tqGo(event,this,'windows')">
     <svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="1"/><path d="M12 4v16M5 12h14"/></svg>
     Windows<span class="go">Get quotes →</span></a>
-  <a class="tile" data-service="bathroom" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=bathroom" onclick="tqGo(this,'bathroom')">
+  <a class="tile" data-service="bathroom" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=bathroom" onclick="return tqGo(event,this,'bathroom')">
     <svg viewBox="0 0 24 24"><path d="M4 12h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/><path d="M6 12V6a2 2 0 0 1 4 0"/><path d="M7 19l-1 2M17 19l1 2"/></svg>
     Bathroom<span class="go">Get quotes →</span></a>
-  <a class="tile" data-service="other" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=other" onclick="tqGo(this,'other')">
+  <a class="tile" data-service="other" href="https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz?sub1=organic&amp;sub2=other" onclick="return tqGo(event,this,'other')">
     <svg viewBox="0 0 24 24"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6V21h3.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6l-3 3-2.6-.4-.4-2.6z"/></svg>
     Something else<span class="go">Get quotes →</span></a>
 </div>
@@ -154,12 +176,12 @@ if (document.readyState === 'loading') {
 <section class="steps">
   <div class="step"><span class="num">1</span><div><b>Pick your project</b><p>Roof, windows, bath — or any of 17 home services.</p></div></div>
   <div class="step"><span class="num">2</span><div><b>Answer a few questions</b><p>About a minute. Where you are, what the job is, when you want it done.</p></div></div>
-  <div class="step"><span class="num">3</span><div><b>Compare & choose</b><p>Local licensed pros send competing quotes. You pick — or walk away. No obligation.</p></div></div>
+  <div class="step"><span class="num">3</span><div><b>Compare & choose</b><p>Local pros send competing quotes. You pick — or walk away. No obligation.</p></div></div>
 </section>
 
 <section class="band"><div class="band-in">
   <b>The spread between quotes will surprise you</b>
-  <p>Two contractors, same job, same materials — and quotes routinely come back thousands of dollars apart. The only way to know? Compare before you sign.</p>
+  <p>Two contractors, same job, same materials — and quotes can differ by a surprising amount. The only way to know? Compare before you sign.</p>
 </div></section>
 
 <footer class="foot">
