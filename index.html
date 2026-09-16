@@ -64,7 +64,6 @@ fbq('init','1704418213974680');
 fbq('track','PageView');
 
 const BEACON_TRACKING_BASE = 'https://track.beaconaffiliates.com/c/-zjrXgp2CbtSmgtz';
-const OFFER_CLICK_DELAY_MS = 150;
 const FORWARDED_PAGE_PARAMS = [
   'sub3',
   'sub4',
@@ -130,17 +129,7 @@ function tqGo(event, link, service) {
   const destination = tqBeaconUrl(service);
   link.href = destination;
   try{fbq('trackCustom','OfferClick',{content_name:service});}catch(e){}
-
-  if (!event || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-    return true;
-  }
-
-  event.preventDefault();
-  window.setTimeout(function() {
-    window.location.assign(destination);
-  }, OFFER_CLICK_DELAY_MS);
-
-  return false;
+  return true;
 }
 
 function tqPrepareLinks() {
