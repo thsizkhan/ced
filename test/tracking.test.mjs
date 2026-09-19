@@ -6,7 +6,7 @@
 //
 // These tests protect native service-link navigation and the tracking wiring:
 //  - Service clicks keep native anchor navigation; analytics failures cannot block it.
-//  - TikTok base pixel present, PageView only (no browser-side conversion).
+//  - TikTok base pixel, PageView, and service-tile ClickButton; no browser Lead.
 //  - ttclid (URL) and ttp (_ttp cookie) forwarded to Beacon when present, never fabricated.
 //  - Existing Meta (fbclid/_fbp/fbc) + UTM + sub2 routing through Beacon preserved.
 
@@ -108,10 +108,11 @@ test('1. TikTok base Pixel ID present (PageView base code)', () => {
   assert.match(HTML, /ttq\.page\(\)/); // PageView / identity only
 });
 
-test('2. no browser-side Lead / conversion event fired', () => {
-  assert.doesNotMatch(HTML, /ttq\.track\s*\(/i);            // no TikTok event tracking at all
+test('2. ClickButton is the only browser TikTok tracking event', () => {
+  const eventNames = [...HTML.matchAll(/ttq\.track\s*\(\s*['"]([^'"]+)['"]/g)].map((match) => match[1]);
+  assert.deepEqual(eventNames, ['ClickButton']);
   assert.doesNotMatch(HTML, /SubmitForm|CompleteRegistration/i);
-  assert.doesNotMatch(HTML, /ttq[^\n]*['"]Lead['"]/i);      // no TikTok Lead
+  assert.doesNotMatch(HTML, /ttq\.track\s*\(\s*['"]Lead['"]/i);
 });
 
 test('3. landing-URL ttclid is preserved to Beacon', () => {
@@ -186,9 +187,13 @@ test('11. every service click uses native navigation with a valid Beacon href', 
     search: '?utm_source=meta&utm_medium=paid&fbclid=FBCLICK&ttclid=TTCLICK',
     cookies: ['_fbp=fb.1.100.200', '_fbc=fb.1.100.FBCLICK', '_ttp=ttp.first.party.9'],
   });
+  const tiktokEvents = [];
+  assert.equal(env.ttq.filter((entry) => entry[0] === 'track').length, 0, 'no ClickButton on PageView');
+  env.ttq.track = (name, payload) => tiktokEvents.push({ name, payload });
 
   for (const service of SERVICES) {
     const link = { href: staticServiceLinks().get(service) };
+    assert.ok(HTML.includes(`onclick="return tqGo(event,this,'${service}')"`), `${service} tile calls tqGo once`);
     let prevented = false;
     const result = env.tqGo({ preventDefault() { prevented = true; } }, link, service);
     const url = new URL(link.href);
@@ -205,6 +210,10 @@ test('11. every service click uses native navigation with a valid Beacon href', 
     assert.equal(url.searchParams.get('fbc'), 'fb.1.100.FBCLICK');
     assert.equal(url.searchParams.get('ttclid'), 'TTCLICK');
     assert.equal(url.searchParams.get('ttp'), 'ttp.first.party.9');
+    assert.equal(tiktokEvents.length, SERVICES.indexOf(service) + 1, 'one TikTok event per tile click');
+    assert.equal(tiktokEvents.at(-1).name, 'ClickButton');
+    assert.deepEqual(Object.keys(tiktokEvents.at(-1).payload), ['content_name']);
+    assert.equal(tiktokEvents.at(-1).payload.content_name, service);
   }
 
   assert.deepEqual(env.__activity.timers, [], 'no delayed navigation timer');
@@ -277,4 +286,26 @@ test('16. sub1 precedence and ttp URL fallback remain unchanged', () => {
 
   const organic = paramsOf(makeEnv({}).tqBeaconUrl('other'));
   assert.equal(organic.get('sub1'), 'organic');
+});
+
+test('17. missing or throwing TikTok tracking cannot block native navigation', () => {
+  for (const mode of ['missing pixel', 'missing track', 'throwing track']) {
+    const env = makeEnv({ search: '?sub1=paid&ttclid=TT123' });
+    if (mode === 'missing pixel') {
+      delete env.ttq;
+    } else if (mode === 'missing track') {
+      delete env.ttq.track;
+    } else {
+      env.ttq.track = () => { throw new Error('simulated TikTok failure'); };
+    }
+
+    const link = { href: staticServiceLinks().get('windows') };
+    let prevented = false;
+    assert.equal(env.tqGo({ preventDefault() { prevented = true; } }, link, 'windows'), true);
+    assert.equal(prevented, false, `${mode} does not cancel native navigation`);
+    assert.equal(new URL(link.href).searchParams.get('sub2'), 'windows');
+    assert.equal(new URL(link.href).searchParams.get('ttclid'), 'TT123');
+    assert.deepEqual(env.__activity.timers, []);
+    assert.deepEqual(env.__activity.assigned, []);
+  }
 });
